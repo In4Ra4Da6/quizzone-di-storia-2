@@ -1,0 +1,1675 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quiz — Storia di Roma</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+<style>
+  :root {
+    --gold: #C9A84C;
+    --gold-light: #E8C96A;
+    --crimson: #8B1A1A;
+    --stone: #2A2420;
+    --marble: #F5F0E8;
+    --marble-dark: #E8E0D0;
+    --ink: #1A1510;
+    --ash: #6B5E52;
+    --correct: #3D7A4A;
+    --wrong: #8B1A1A;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Crimson Text', Georgia, serif;
+    background: var(--stone);
+    color: var(--marble);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: 
+      radial-gradient(ellipse at 20% 20%, rgba(201,168,76,0.06) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 80%, rgba(139,26,26,0.08) 0%, transparent 50%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='4' height='4' fill='none'/%3E%3Ccircle cx='1' cy='1' r='0.5' fill='rgba(255,255,255,0.015)'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  #app { position: relative; z-index: 1; }
+
+  /* ── SCREENS ── */
+  .screen { display: none; }
+  .screen.active { display: flex; }
+
+  /* ── INTRO ── */
+  #intro {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  .laurel {
+    font-size: 3rem;
+    letter-spacing: 0.5rem;
+    color: var(--gold);
+    opacity: 0.7;
+    animation: pulse 3s ease-in-out infinite;
+  }
+
+  @keyframes pulse { 0%,100%{opacity:0.5} 50%{opacity:0.9} }
+
+  .intro-title {
+    font-family: 'Cinzel', serif;
+    font-size: clamp(2.2rem, 6vw, 4.5rem);
+    font-weight: 900;
+    color: var(--gold);
+    text-shadow: 0 0 40px rgba(201,168,76,0.4), 2px 2px 0 rgba(0,0,0,0.5);
+    letter-spacing: 0.08em;
+    margin: 1rem 0 0.5rem;
+    line-height: 1.1;
+  }
+
+  .intro-subtitle {
+    font-family: 'Cinzel', serif;
+    font-size: clamp(0.85rem, 2vw, 1.1rem);
+    color: var(--ash);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    margin-bottom: 2.5rem;
+  }
+
+  .intro-desc {
+    font-size: 1.15rem;
+    line-height: 1.8;
+    color: var(--marble-dark);
+    max-width: 520px;
+    margin-bottom: 3rem;
+    opacity: 0.85;
+  }
+
+  .divider {
+    width: 200px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    margin: 1.5rem auto;
+  }
+
+  .btn-start {
+    font-family: 'Cinzel', serif;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--stone);
+    background: linear-gradient(135deg, var(--gold-light), var(--gold));
+    border: none;
+    padding: 1rem 3rem;
+    cursor: pointer;
+    clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+    transition: all 0.3s;
+    box-shadow: 0 4px 24px rgba(201,168,76,0.3);
+  }
+
+  .btn-start:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(201,168,76,0.5);
+    background: linear-gradient(135deg, #f0d97a, var(--gold-light));
+  }
+
+  /* ── QUIZ ── */
+  #quiz {
+    flex-direction: column;
+    min-height: 100vh;
+    padding: 1.5rem;
+    max-width: 820px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .quiz-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(201,168,76,0.2);
+  }
+
+  .section-badge {
+    font-family: 'Cinzel', serif;
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--gold);
+    background: rgba(201,168,76,0.1);
+    border: 1px solid rgba(201,168,76,0.25);
+    padding: 0.3rem 0.8rem;
+    clip-path: polygon(4px 0%, 100% 0%, calc(100% - 4px) 100%, 0% 100%);
+  }
+
+  .q-counter {
+    font-family: 'Cinzel', serif;
+    font-size: 0.85rem;
+    color: var(--ash);
+  }
+
+  .q-counter span {
+    color: var(--gold);
+    font-weight: 700;
+    font-size: 1.1rem;
+  }
+
+  /* Progress bar */
+  .progress-wrap {
+    width: 100%;
+    height: 4px;
+    background: rgba(255,255,255,0.06);
+    margin-bottom: 2rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--crimson), var(--gold));
+    transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
+    position: relative;
+  }
+
+  .progress-bar::after {
+    content: '';
+    position: absolute;
+    right: 0; top: 0; bottom: 0;
+    width: 20px;
+    background: rgba(255,255,255,0.4);
+    filter: blur(4px);
+  }
+
+  /* Question card */
+  .question-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(201,168,76,0.15);
+    padding: 2rem 2.2rem;
+    margin-bottom: 1.5rem;
+    position: relative;
+  }
+
+  .question-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+    background: linear-gradient(180deg, var(--gold), var(--crimson));
+  }
+
+  .question-num {
+    font-family: 'Cinzel', serif;
+    font-size: 0.75rem;
+    color: var(--gold);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 0.8rem;
+    opacity: 0.8;
+  }
+
+  .question-text {
+    font-size: 1.2rem;
+    line-height: 1.65;
+    color: var(--marble);
+    font-weight: 600;
+  }
+
+  /* Options */
+  .options-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .option-btn {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(201,168,76,0.12);
+    padding: 0.9rem 1.2rem;
+    cursor: pointer;
+    text-align: left;
+    color: var(--marble-dark);
+    font-family: 'Crimson Text', serif;
+    font-size: 1.05rem;
+    line-height: 1.5;
+    transition: all 0.2s;
+    width: 100%;
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%);
+  }
+
+  .option-btn:hover:not(:disabled) {
+    background: rgba(201,168,76,0.08);
+    border-color: rgba(201,168,76,0.35);
+    color: var(--marble);
+    transform: translateX(3px);
+  }
+
+  .option-label {
+    font-family: 'Cinzel', serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--gold);
+    min-width: 1.4rem;
+    padding-top: 0.15rem;
+  }
+
+  .option-btn.correct {
+    background: rgba(61,122,74,0.2);
+    border-color: rgba(61,122,74,0.5);
+    color: #90EEA0;
+  }
+
+  .option-btn.wrong {
+    background: rgba(139,26,26,0.25);
+    border-color: rgba(139,26,26,0.5);
+    color: #FF9999;
+  }
+
+  .option-btn.disabled { cursor: default; }
+
+  /* Feedback */
+  .feedback {
+    display: none;
+    padding: 1.1rem 1.4rem;
+    margin-bottom: 1.5rem;
+    position: relative;
+    animation: slideIn 0.35s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .feedback.show { display: flex; gap: 1rem; align-items: flex-start; }
+
+  .feedback.correct-fb {
+    background: rgba(61,122,74,0.15);
+    border-left: 3px solid #3D7A4A;
+  }
+
+  .feedback.wrong-fb {
+    background: rgba(139,26,26,0.15);
+    border-left: 3px solid var(--crimson);
+  }
+
+  .fb-icon { font-size: 1.4rem; flex-shrink: 0; }
+
+  .fb-content {}
+
+  .fb-title {
+    font-family: 'Cinzel', serif;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 0.3rem;
+  }
+
+  .correct-fb .fb-title { color: #90EEA0; }
+  .wrong-fb .fb-title { color: #FF9999; }
+
+  .fb-text {
+    font-size: 0.98rem;
+    line-height: 1.55;
+    color: var(--marble-dark);
+    opacity: 0.9;
+  }
+
+  /* Next button */
+  .btn-next {
+    display: none;
+    font-family: 'Cinzel', serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--stone);
+    background: linear-gradient(135deg, var(--gold-light), var(--gold));
+    border: none;
+    padding: 0.85rem 2.5rem;
+    cursor: pointer;
+    clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%);
+    transition: all 0.25s;
+    align-self: flex-end;
+  }
+
+  .btn-next:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(201,168,76,0.4);
+  }
+
+  .btn-next.show { display: block; }
+
+  /* Score tally */
+  .score-tally {
+    display: flex;
+    gap: 1.5rem;
+    font-family: 'Cinzel', serif;
+    font-size: 0.8rem;
+    color: var(--ash);
+    letter-spacing: 0.1em;
+  }
+
+  .tally-correct { color: #90EEA0; }
+  .tally-wrong { color: #FF9999; }
+
+  /* ── RESULTS ── */
+  #results {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+  }
+
+  .results-wrap {
+    max-width: 600px;
+    width: 100%;
+  }
+
+  .result-grade {
+    font-family: 'Cinzel', serif;
+    font-size: clamp(5rem, 20vw, 9rem);
+    font-weight: 900;
+    line-height: 1;
+    margin: 1rem 0;
+    background: linear-gradient(135deg, var(--gold-light), var(--gold), var(--crimson));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: none;
+    filter: drop-shadow(0 0 30px rgba(201,168,76,0.3));
+  }
+
+  .result-label {
+    font-family: 'Cinzel', serif;
+    font-size: clamp(1.1rem, 3vw, 1.6rem);
+    color: var(--gold);
+    letter-spacing: 0.1em;
+    margin-bottom: 0.5rem;
+  }
+
+  .result-score {
+    font-size: 1.1rem;
+    color: var(--ash);
+    margin-bottom: 1.5rem;
+  }
+
+  .result-score strong { color: var(--marble); }
+
+  .stats-row {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    margin: 1.5rem 0 2rem;
+    flex-wrap: wrap;
+  }
+
+  .stat-box {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(201,168,76,0.15);
+    padding: 1rem 1.8rem;
+    text-align: center;
+  }
+
+  .stat-num {
+    font-family: 'Cinzel', serif;
+    font-size: 2rem;
+    font-weight: 700;
+    display: block;
+  }
+
+  .stat-num.green { color: #90EEA0; }
+  .stat-num.red { color: #FF9999; }
+
+  .stat-lbl {
+    font-size: 0.8rem;
+    color: var(--ash);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-family: 'Cinzel', serif;
+  }
+
+  .btn-restart {
+    font-family: 'Cinzel', serif;
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--stone);
+    background: linear-gradient(135deg, var(--gold-light), var(--gold));
+    border: none;
+    padding: 1rem 2.8rem;
+    cursor: pointer;
+    clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+    transition: all 0.3s;
+    margin-top: 1rem;
+  }
+
+  .btn-restart:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(201,168,76,0.45);
+  }
+
+  /* Decorative corner */
+  .corner-deco {
+    position: fixed;
+    opacity: 0.06;
+    pointer-events: none;
+    font-family: 'Cinzel', serif;
+    font-size: 12rem;
+    font-weight: 900;
+    color: var(--gold);
+    line-height: 1;
+    z-index: 0;
+  }
+  .corner-tl { top: -2rem; left: -2rem; }
+  .corner-br { bottom: -2rem; right: -2rem; }
+
+  @media (max-width: 600px) {
+    .question-card { padding: 1.4rem 1.2rem; }
+    .quiz-header { flex-direction: column; gap: 0.7rem; align-items: flex-start; }
+    .score-tally { flex-wrap: wrap; gap: 0.8rem; }
+  }
+
+  /* ── FIREBASE / LEADERBOARD ── */
+  .name-form {
+    display: flex;
+    gap: 0.6rem;
+    margin: 1.2rem 0 0.5rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .name-input {
+    font-family: 'Crimson Text', serif;
+    font-size: 1rem;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(201,168,76,0.3);
+    color: var(--marble);
+    padding: 0.65rem 1rem;
+    outline: none;
+    width: 200px;
+    transition: border-color 0.2s;
+  }
+  .name-input::placeholder { color: var(--ash); }
+  .name-input:focus { border-color: var(--gold); }
+
+  .btn-save {
+    font-family: 'Cinzel', serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--stone);
+    background: linear-gradient(135deg, var(--gold-light), var(--gold));
+    border: none;
+    padding: 0.65rem 1.4rem;
+    cursor: pointer;
+    clip-path: polygon(5px 0%, 100% 0%, calc(100% - 5px) 100%, 0% 100%);
+    transition: all 0.2s;
+  }
+  .btn-save:hover { filter: brightness(1.1); }
+  .btn-save:disabled { opacity: 0.5; cursor: default; }
+
+  .save-status {
+    font-size: 0.88rem;
+    min-height: 1.2rem;
+    margin-bottom: 0.5rem;
+    color: var(--ash);
+  }
+  .save-status.ok { color: #90EEA0; }
+  .save-status.err { color: #FF9999; }
+
+  .leaderboard {
+    margin-top: 1.5rem;
+    width: 100%;
+    text-align: left;
+  }
+
+  .lb-title {
+    font-family: 'Cinzel', serif;
+    font-size: 0.75rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .lb-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(201,168,76,0.3), transparent);
+  }
+
+  .lb-list { list-style: none; display: flex; flex-direction: column; gap: 0.35rem; }
+
+  .lb-item {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(201,168,76,0.1);
+    padding: 0.55rem 0.9rem;
+    font-size: 0.95rem;
+    animation: slideIn 0.3s ease;
+  }
+
+  .lb-rank {
+    font-family: 'Cinzel', serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--ash);
+    min-width: 1.5rem;
+    text-align: center;
+  }
+  .lb-item:nth-child(1) .lb-rank { color: #FFD700; font-size: 0.9rem; }
+  .lb-item:nth-child(2) .lb-rank { color: #C0C0C0; }
+  .lb-item:nth-child(3) .lb-rank { color: #CD7F32; }
+
+  .lb-name { flex: 1; color: var(--marble-dark); }
+  .lb-score {
+    font-family: 'Cinzel', serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--gold);
+  }
+  .lb-grade {
+    font-size: 0.75rem;
+    color: var(--ash);
+    min-width: 1.5rem;
+    text-align: right;
+  }
+
+  .lb-loading {
+    text-align: center;
+    color: var(--ash);
+    font-size: 0.9rem;
+    padding: 0.8rem;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+<div class="corner-deco corner-tl">SPQR</div>
+<div class="corner-deco corner-br">SPQR</div>
+
+<div id="app">
+
+  <!-- INTRO -->
+  <section id="intro" class="screen active">
+    <div class="laurel">𓃭 ⚔ 𓃭</div>
+    <h1 class="intro-title">STORIA<br>DI ROMA</h1>
+    <p class="intro-subtitle">Verifica Storica · 100 Domande</p>
+    <div class="divider"></div>
+    <p class="intro-desc">
+      Dalle origini leggendarie di Romolo fino alla morte di Augusto. 
+      Risposta multipla, feedback immediato, voto finale.
+      <br><br>
+      <em>Ab Urbe Condita — Sei pronto, civis?</em>
+    </p>
+    <button class="btn-start" onclick="startQuiz()">Inizia il Quiz</button>
+  </section>
+
+  <!-- QUIZ -->
+  <section id="quiz" class="screen">
+    <div class="quiz-header">
+      <div class="section-badge" id="sectionBadge">Parte 1</div>
+      <div class="score-tally">
+        <span class="tally-correct">✓ <span id="tallyC">0</span></span>
+        <span class="tally-wrong">✗ <span id="tallyW">0</span></span>
+      </div>
+      <div class="q-counter">Domanda <span id="qNum">1</span> / 100</div>
+    </div>
+
+    <div class="progress-wrap">
+      <div class="progress-bar" id="progressBar" style="width:1%"></div>
+    </div>
+
+    <div class="question-card">
+      <div class="question-num" id="questionNum">DOMANDA 01</div>
+      <div class="question-text" id="questionText"></div>
+    </div>
+
+    <div class="options-grid" id="optionsGrid"></div>
+
+    <div class="feedback" id="feedback">
+      <div class="fb-icon" id="fbIcon"></div>
+      <div class="fb-content">
+        <div class="fb-title" id="fbTitle"></div>
+        <div class="fb-text" id="fbText"></div>
+      </div>
+    </div>
+
+    <button class="btn-next" id="btnNext" onclick="nextQuestion()">Prossima Domanda →</button>
+  </section>
+
+  <!-- RESULTS -->
+  <section id="results" class="screen">
+    <div class="results-wrap">
+      <div class="laurel">𓃭 ⚔ 𓃭</div>
+      <p class="result-label" id="resultLabel">OTTIMO</p>
+      <div class="result-grade" id="resultGrade">8</div>
+      <p class="result-score">Hai risposto correttamente a <strong id="finalScore">0</strong> domande su <strong>100</strong></p>
+      <div class="divider"></div>
+      <div class="stats-row">
+        <div class="stat-box">
+          <span class="stat-num green" id="statCorrect">0</span>
+          <span class="stat-lbl">Corrette</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-num red" id="statWrong">0</span>
+          <span class="stat-lbl">Errate</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-num" style="color:var(--gold)" id="statPct">0%</span>
+          <span class="stat-lbl">Percentuale</span>
+        </div>
+      </div>
+
+      <!-- SALVA PUNTEGGIO -->
+      <div class="name-form">
+        <input class="name-input" id="playerName" type="text" maxlength="24" placeholder="Il tuo nome…" />
+        <button class="btn-save" id="btnSave" onclick="saveScore()">💾 Salva</button>
+      </div>
+      <p class="save-status" id="saveStatus"></p>
+
+      <!-- CLASSIFICA -->
+      <div class="leaderboard">
+        <div class="lb-title">🏛 Classifica — Top 10</div>
+        <ul class="lb-list" id="lbList">
+          <li class="lb-loading">Caricamento classifica…</li>
+        </ul>
+      </div>
+
+      <button class="btn-restart" onclick="restartQuiz()" style="margin-top:2rem;">↺ Ricomincia</button>
+    </div>
+  </section>
+
+</div>
+
+<script>
+const QUESTIONS = [
+  // PARTE 1: Le Origini e l'Età Monarchica (753 - 509 a.C.)
+  {
+    section: "Parte 1 · Origini & Monarchia",
+    q: "Secondo la leggenda, da chi discendevano i fondatori di Roma?",
+    opts: ["Dagli Etruschi", "Da Enea, principe troiano", "Dai Greci di Taranto", "Dai Sanniti"],
+    correct: 1,
+    reason: "La leggenda romana vuole che Romolo e Remo discendessero da Enea, il principe troiano figlio di Venere, attraverso la stirpe dei re di Alba Longa."
+  },
+  {
+    section: "Parte 1 · Origini & Monarchia",
+    q: "Qual è la data leggendaria della fondazione di Roma?",
+    opts: ["21 aprile 753 a.C.", "15 marzo 509 a.C.", "27 a.C.", "1000 a.C."],
+    correct: 0,
+    reason: "La tradizione, fissata dall'antiquario Varrone, stabilisce la fondazione di Roma al 21 aprile del 753 a.C."
+  },
+  {
+    section: "Parte 1 · Origini & Monarchia",
+    q: "Cosa si intende per \"sinecismo\" nella storia delle origini di Roma?",
+    opts: ["Una riforma religiosa", "La fusione di comunità di villaggio preesistenti", "Un trattato di pace con i Galli", "L'espulsione dei re etruschi"],
+    correct: 1,
+    reason: "Il sinecismo indica il processo di unificazione e fusione di più comunità rurali separate in un unico insediamento urbano, che è alla base delle origini di Roma."
+  },
+  {
+    section: "Parte 1 · Origini & Monarchia",
+    q: "Quale colle è considerato il nucleo archeologico originario di Roma?",
+    opts: ["Aventino", "Palatino", "Quirinale", "Esquilino"],
+    correct: 1,
+    reason: "Il Palatino è il colle su cui le evidenze archeologiche collocano il primitivo nucleo dell'insediamento romano, la cosiddetta \"Roma Quadrata\"."
+  },
+  {
+    section: "Parte 1 · Origini & Monarchia",
+    q: "Nella società arcaica, chi era il \"pater familias\"?",
+    opts: ["Il capo della Gens", "Il detentore del potere assoluto su tutti i membri della famiglia", "Un sacerdote di Marte", "Il comandante della legione"],
+    correct: 1,
+    reason: "Il pater familias esercitava la patria potestas, un potere giuridicamente assoluto su moglie, figli, nipoti e schiavi; poteva persino condannarli a morte."
+  },
+  {
+    section: "Parte 1 · Origini & Monarchia",
+    q: "Cos'è la \"Gens\"?",
+    opts: ["Un'unità dell'esercito", "Un insieme di famiglie con un antenato comune", "Una tassa sulla proprietà", "Una legge agraria"],
+    correct: 1,
+    reason: "La gens era un raggruppamento di famiglie patrizie (e in seguito plebee) che si ritenevano discendenti da un capostipite comune, spesso mitico."
+  },
+  {
+    section: "Parte 1 · Origini & Monarchia",
+    q: "Chi erano i \"clienti\"?",
+    opts: ["Mercanti stranieri", "Uomini liberi sottomessi a una famiglia nobile in cambio di protezione", "Schiavi prigionieri di guerra", "I figli cadetti dei patrizi"],
+    correct: 1,
+    reason: "I clienti erano uomini liberi (ingenui o liberti) legati a un patrono patrizio da un rapporto di dipendenza personale: il patrono li proteggeva, loro gli offrivano sostegno politico e servigi."
+  },
+  {
+    section: "Parte 1 · Origini & Monarchia",
+    q: "Qual era la principale differenza politica tra Patrizi e Plebei alle origini?",
+    opts: ["I plebei erano schiavi, i patrizi liberi", "I patrizi avevano il monopolio dei diritti politici, i plebei no", "I plebei erano stranieri, i patrizi autoctoni", "Non c'era alcuna differenza"],
+    correct: 1,
+    reason: "I patrizi, discendenti dalle gentes originarie, monopolizzavano le magistrature, il Senato e i sacerdozi. I plebei, benché liberi, erano esclusi dalla vita politica."
+  },
+  {
+    section: "Parte 1 · Origini & Monarchia",
+    q: "Qual era la funzione principale dei \"Comizi Curiati\"?",
+    opts: ["Scrivere le leggi", "Attribuire l'imperium al re e gestire il reclutamento", "Giudicare i reati di tradimento", "Eleggere i tribuni"],
+    correct: 1,
+    reason: "I Comizi Curiati erano l'assemblea più antica, organizzata in 30 curie, e avevano il compito di investire il re dell'imperium e di ratificare i testamenti e le adozioni."
+  },
+  {
+    section: "Parte 1 · Origini & Monarchia",
+    q: "Com'era descritto il potere del Re a Roma?",
+    opts: ["Assoluto ed ereditario", "Elettivo e non assoluto, poiché doveva rispettare le leggi", "Solo di natura religiosa", "Nominato direttamente dagli dèi"],
+    correct: 1,
+    reason: "Il re romano non era un monarca assoluto né ereditario: veniva eletto dal Senato e dal popolo, e il suo potere era temperato dal Senato e dal rispetto del mos maiorum."
+  },
+  {
+    section: "Parte 1 · Origini & Monarchia",
+    q: "Chi formava il Senato in età monarchica?",
+    opts: ["Tutti i cittadini maschi", "I capi delle gentes patrizie (senex)", "I soldati più valorosi", "I mercanti stranieri"],
+    correct: 1,
+    reason: "Il Senato era originariamente composto dai capi anziani (senex) delle gentes patrizie, e fungeva da consiglio del re con funzioni consultive e deliberative."
+  },
+  {
+    section: "Parte 1 · Origini & Monarchia",
+    q: "Su cosa si basava la \"Riforma Centuriata\" attribuita a Servio Tullio?",
+    opts: ["Sulla discendenza di sangue", "Sulla ricchezza (censo)", "Sull'altezza dei soldati", "Sulla zona di residenza"],
+    correct: 1,
+    reason: "Servio Tullio reorganizzò l'esercito e l'assemblea dividendo i cittadini in classi in base al censo (patrimonio), superando il criterio aristocratico della nascita."
+  },
+  {
+    section: "Parte 1 · Origini & Monarchia",
+    q: "Perché il sistema dei Comizi Centuriati era oligarchico?",
+    opts: ["Perché votavano solo i poveri", "Perché la prima classe (più ricca) deteneva la maggioranza dei voti", "Perché decideva tutto il re", "Perché il voto era segreto"],
+    correct: 1,
+    reason: "La prima classe di censo, composta dai più ricchi, disponeva di 80 centurie su 193 totali. In pratica controllava la maggioranza dei voti nell'assemblea."
+  },
+  {
+    section: "Parte 1 · Origini & Monarchia",
+    q: "Quale termine definisce il complesso di valori tradizionali dei Romani?",
+    opts: ["Pax Deorum", "Mos Maiorum", "Res Publica", "Imperium"],
+    correct: 1,
+    reason: "Il mos maiorum (\"costume degli antenati\") era l'insieme di valori, norme e tradizioni non scritte trasmesse di generazione in generazione, fondamento dell'identità romana."
+  },
+  {
+    section: "Parte 1 · Origini & Monarchia",
+    q: "La religione romana era principalmente:",
+    opts: ["Privata e mistica", "Pubblica, collettiva e utilitaristica", "Monoteista", "Basata sulla lettura di libri sacri stranieri"],
+    correct: 1,
+    reason: "La religione romana era essenzialmente un culto pubblico e civico, regolato dallo Stato attraverso i collegi sacerdotali. Il rapporto con gli dèi era pratico: si offrivano sacrifici per ottenere protezione (pax deorum)."
+  },
+  {
+    section: "Parte 1 · Origini & Monarchia",
+    q: "Quale evento segna la fine della Monarchia nel 509 a.C.?",
+    opts: ["La morte di Romolo", "La cacciata di Tarquinio il Superbo", "Un terremoto", "L'invasione dei Cartaginesi"],
+    correct: 1,
+    reason: "La tradizione racconta che Tarquinio il Superbo, settimo e ultimo re di Roma, fu cacciato dai nobili romani nel 509 a.C. a seguito dello stupro di Lucrezia compiuto da suo figlio Sesto."
+  },
+  // PARTE 2: La Nascita della Repubblica e le Lotte Sociali
+  {
+    section: "Parte 2 · La Repubblica",
+    q: "Cosa significa letteralmente \"Res publica\"?",
+    opts: ["Stato dei ricchi", "Cosa di tutti", "Potere divino", "Governo del re"],
+    correct: 1,
+    reason: "\"Res publica\" significa letteralmente \"cosa pubblica\" o \"cosa del popolo\", indicando che lo Stato appartiene a tutti i cittadini e non a un singolo sovrano."
+  },
+  {
+    section: "Parte 2 · La Repubblica",
+    q: "Quali magistrati sostituirono il potere esecutivo del re?",
+    opts: ["I Questori", "I Consoli", "I Tribuni", "I Censori"],
+    correct: 1,
+    reason: "Il potere del re fu diviso tra due Consoli, eletti annualmente. La collegialità e la brevità del mandato erano garanzie contro l'abuso di potere."
+  },
+  {
+    section: "Parte 2 · La Repubblica",
+    q: "Quale fu una causa economica delle lotte tra patrizi e plebei?",
+    opts: ["L'impoverimento dei piccoli proprietari a causa delle continue guerre", "Le tasse troppo basse", "L'abbondanza di grano", "Il divieto di commerciare"],
+    correct: 0,
+    reason: "Le continue guerre obbligavano i contadini-soldati a lasciare i campi, impoverendo i piccoli proprietari plebei che poi si indebitavano e rischiavano la schiavitù per debiti."
+  },
+  {
+    section: "Parte 2 · La Repubblica",
+    q: "Cos'era la \"schiavitù per debiti\" (nexum)?",
+    opts: ["Una punizione per i ladri", "La riduzione in schiavitù del debitore insolvente", "Un modo per diventare cittadini", "Una tassa doganale"],
+    correct: 1,
+    reason: "Il nexum era un contratto per cui il debitore insolvente poteva essere ridotto in schiavitù dal creditore. Fu abolito dalla Lex Poetelia Papiria nel 326 a.C."
+  },
+  {
+    section: "Parte 2 · La Repubblica",
+    q: "Quale magistratura plebea fu creata per difendere i plebei?",
+    opts: ["Il Consolato", "Il Tribunato della Plebe", "La Questura", "La Pretura"],
+    correct: 1,
+    reason: "Il Tribunato della Plebe fu creato nel 494 a.C. dopo la Prima Secessione della plebe. I tribuni erano sacrosanti (inviolabili) e potevano porre il veto alle decisioni contrarie alla plebe."
+  },
+  {
+    section: "Parte 2 · La Repubblica",
+    q: "Cos'è il \"diritto di veto\" dei tribuni?",
+    opts: ["Il potere di dichiarare guerra", "Il potere di bloccare decisioni contrarie agli interessi della plebe", "Il potere di condannare a morte i patrizi", "Il diritto di parola in Senato"],
+    correct: 1,
+    reason: "L'intercessio era il potere dei tribuni di bloccare (dire \"veto\", cioè \"mi oppongo\") qualsiasi atto di un magistrato ritenuto dannoso per la plebe."
+  },
+  {
+    section: "Parte 2 · La Repubblica",
+    q: "Cosa sono i \"Plebisciti\"?",
+    opts: ["Preghiere pubbliche", "Leggi votate dal Concilio della Plebe", "Accordi commerciali", "Discorsi dei consoli"],
+    correct: 1,
+    reason: "I plebisciti erano delibere votate dal Concilio della Plebe. Dopo le Leges Hortensiae del 287 a.C. divennero vincolanti per tutti i cittadini, patrizi compresi."
+  },
+  {
+    section: "Parte 2 · La Repubblica",
+    q: "Qual è l'importanza delle Leggi delle XII Tavole (450 a.C.)?",
+    opts: ["Furono le prime leggi scritte, garantendo uguaglianza giuridica", "Abolirono il Senato", "Divisero Roma in quartieri", "Diedero la cittadinanza agli schiavi"],
+    correct: 0,
+    reason: "Le XII Tavole furono la prima codificazione scritta del diritto romano. Mettere le leggi per iscritto impediva ai patrizi di interpretarle arbitrariamente a danno dei plebei."
+  },
+  {
+    section: "Parte 2 · La Repubblica",
+    q: "Quale legge permise il matrimonio tra patrizi e plebei?",
+    opts: ["Legge Agraria", "Legge Canuleia", "Legge Frumentaria", "Legge Licinia-Sestia"],
+    correct: 1,
+    reason: "La Lex Canuleia del 445 a.C. abolì il divieto di matrimonio tra patrizi e plebei, che era sancito dalla tavola XI delle XII Tavole."
+  },
+  {
+    section: "Parte 2 · La Repubblica",
+    q: "Cosa stabilirono le Leggi Licinie-Sestie riguardo all'ager publicus?",
+    opts: ["Che poteva essere preso solo dai patrizi", "Un limite massimo di 500 iugeri per cittadino", "Che non poteva essere coltivato", "Che apparteneva agli dèi"],
+    correct: 1,
+    reason: "Le Leges Liciniae-Sextiae del 367 a.C. fissarono a 500 iugeri il massimo di terra pubblica occupabile da un singolo, per limitare l'accaparramento dei patrizi."
+  },
+  {
+    section: "Parte 2 · La Repubblica",
+    q: "Quali sono le tre caratteristiche comuni a tutte le magistrature repubblicane ordinarie?",
+    opts: ["Temporanee, collegiali, elettive", "Ereditarie, assolute, a vita", "Gratuite, segrete, divine", "Militari, religiose, civili"],
+    correct: 0,
+    reason: "Tutte le magistrature ordinarie romane condividevano tre caratteristiche: erano temporanee (durata fissa), collegiali (almeno due titolari con diritto di veto reciproco) ed elettive."
+  },
+  {
+    section: "Parte 2 · La Repubblica",
+    q: "Quanto durava normalmente la carica di Console?",
+    opts: ["6 mesi", "1 anno", "5 anni", "A vita"],
+    correct: 1,
+    reason: "I due Consoli venivano eletti ogni anno dai Comizi Centuriati. La durata annuale era una garanzia contro l'accumulo di potere."
+  },
+  {
+    section: "Parte 2 · La Repubblica",
+    q: "Quale magistrato aveva il compito di amministrare la giustizia?",
+    opts: ["Il Questore", "Il Pretore", "L'Edile", "Il Censore"],
+    correct: 1,
+    reason: "Il Pretore era il magistrato preposto all'amministrazione della giustizia civile e penale. Poteva anche comandare eserciti in assenza dei consoli."
+  },
+  {
+    section: "Parte 2 · La Repubblica",
+    q: "Cosa facevano i Censori?",
+    opts: ["Comandavano la flotta", "Effettuavano il censimento e giudicavano la moralità dei cittadini", "Gestivano l'erario", "Organizzavano i giochi"],
+    correct: 1,
+    reason: "I due Censori, eletti ogni cinque anni, stilavano le liste dei cittadini con i loro beni (census), aggiornando le classi di censo e potevano espellere dal Senato chi mancava ai valori tradizionali."
+  },
+  {
+    section: "Parte 2 · La Repubblica",
+    q: "Chi gestiva l'erario (cassa dello Stato)?",
+    opts: ["Gli Edili", "I Questori", "I Tribuni", "I Consoli"],
+    correct: 1,
+    reason: "I Questori erano i magistrati preposti all'amministrazione finanziaria dello Stato. Gestivano il tesoro pubblico (aerarium) e la contabilità delle province."
+  },
+  {
+    section: "Parte 2 · La Repubblica",
+    q: "Perché la \"Dittatura\" era una magistratura straordinaria?",
+    opts: ["Perché era ricoperta da 10 persone", "Perché concentrava tutti i poteri in un solo uomo per massimo 6 mesi in emergenza", "Perché era l'unica ereditaria", "Perché veniva scelta dagli dèi"],
+    correct: 1,
+    reason: "In caso di grave emergenza militare, il Senato autorizzava un console a nominare un Dittatore che deteneva pieni poteri, ma per un periodo massimo di 6 mesi."
+  },
+  {
+    section: "Parte 2 · La Repubblica",
+    q: "Quale organo ratificava le leggi e gestiva la politica estera?",
+    opts: ["Il Concilio della Plebe", "Il Senato", "I Comizi Tributi", "L'Esercito"],
+    correct: 1,
+    reason: "Il Senato, composto da ex magistrati, era il cuore del governo repubblicano: deliberava su politica estera, finanze, province, religione e ratificava le leggi."
+  },
+  // PARTE 3: L'Espansione in Italia e le Guerre Puniche
+  {
+    section: "Parte 3 · Espansione & Guerre Puniche",
+    q: "Contro quale popolo Roma combatté per il dominio del centro Italia?",
+    opts: ["I Galli", "I Sanniti", "I Cartaginesi", "Gli Egizi"],
+    correct: 1,
+    reason: "Le Guerre Sannitiche (343-290 a.C.) furono tre conflitti durissimi contro i Sanniti, popolo montanaro del centro-sud Italia, che si conclusero con la vittoria di Roma."
+  },
+  {
+    section: "Parte 3 · Espansione & Guerre Puniche",
+    q: "Quale città della Magna Grecia chiamò Pirro in aiuto contro Roma?",
+    opts: ["Siracusa", "Taranto", "Napoli", "Crotone"],
+    correct: 1,
+    reason: "Taranto, ricca città greca del sud Italia, si sentì minacciata dall'espansione romana e chiamò Pirro, re dell'Epiro, in aiuto nel 280 a.C."
+  },
+  {
+    section: "Parte 3 · Espansione & Guerre Puniche",
+    q: "Cosa sono i \"Municipi\"?",
+    opts: ["Caserme di confine", "Città preesistenti con autonomia e diritti civili romani", "Templi di Giove", "Mercati di schiavi"],
+    correct: 1,
+    reason: "I municipi erano città italiche già esistenti che, dopo la conquista romana, conservavano le proprie istituzioni locali (autonomia) ma i cui abitanti godevano (o acquistavano) la cittadinanza romana."
+  },
+  {
+    section: "Parte 3 · Espansione & Guerre Puniche",
+    q: "Quale potenza dominava il Mediterraneo occidentale prima di Roma?",
+    opts: ["Atene", "Cartagine", "Alessandria", "Rodi"],
+    correct: 1,
+    reason: "Cartagine, città fondata dai Fenici nell'attuale Tunisia, era la principale potenza navale e commerciale del Mediterraneo occidentale prima dell'ascesa di Roma."
+  },
+  {
+    section: "Parte 3 · Espansione & Guerre Puniche",
+    q: "Qual era il punto di forza dell'esercito cartaginese?",
+    opts: ["I contadini-soldati", "I mercenari di professione e la flotta", "La cavalleria pesante romana", "Gli arcieri greci"],
+    correct: 1,
+    reason: "Cartagine non possedeva un esercito di cittadini: si affidava principalmente a mercenari professionisti reclutati in Spagna, Africa e Gallia, e alla sua potente flotta militare."
+  },
+  {
+    section: "Parte 3 · Espansione & Guerre Puniche",
+    q: "In che anno scoppiò la Prima Guerra Punica?",
+    opts: ["753 a.C.", "264 a.C.", "146 a.C.", "44 a.C."],
+    correct: 1,
+    reason: "La Prima Guerra Punica iniziò nel 264 a.C. e si concluse nel 241 a.C. con la vittoria romana. Fu il primo grande conflitto di Roma al di fuori della penisola italiana."
+  },
+  {
+    section: "Parte 3 · Espansione & Guerre Puniche",
+    q: "Quale fu il pretesto della Prima Guerra Punica?",
+    opts: ["Il controllo dello Stretto di Messina (caso dei Mamertini)", "Un'offesa ad Enea", "Il furto di una nave a Ostia", "La conquista della Britannia"],
+    correct: 0,
+    reason: "L'intervento di Roma in Sicilia nacque dalla richiesta d'aiuto dei Mamertini (mercenari di Messina) che si trovavano stretti tra Siracusa e Cartagine. Il controllo dello Stretto era in gioco."
+  },
+  {
+    section: "Parte 3 · Espansione & Guerre Puniche",
+    q: "Cosa inventarono i Romani per combattere meglio sul mare?",
+    opts: ["I sottomarini", "I \"corvi\" (passerelle mobili per agganciare le navi)", "Il fuoco greco", "Le vele quadrate"],
+    correct: 1,
+    reason: "Il corvus era un lungo palo con un uncino che veniva abbattuto sulla nave nemica per agganciarla, permettendo ai legionari di combatterla come su terraferma."
+  },
+  {
+    section: "Parte 3 · Espansione & Guerre Puniche",
+    q: "Quali furono le prime province romane dopo la I Guerra Punica?",
+    opts: ["Gallia e Spagna", "Sicilia, Sardegna e Corsica", "Africa e Asia", "Grecia e Macedonia"],
+    correct: 1,
+    reason: "La Sicilia (241 a.C.) fu la prima provincia romana, seguita da Sardegna e Corsica (238 a.C.) sottratte ai Cartaginesi approfittando di una rivolta mercenaria."
+  },
+  {
+    section: "Parte 3 · Espansione & Guerre Puniche",
+    q: "Chi guidò l'esercito cartaginese nella Seconda Guerra Punica?",
+    opts: ["Amilcare", "Annibale Barca", "Asdrubale", "Mitridate"],
+    correct: 1,
+    reason: "Annibale Barca, figlio di Amilcare, fu il grande condottiero cartaginese della Seconda Guerra Punica (218-202 a.C.), che portò la guerra direttamente in Italia."
+  },
+  {
+    section: "Parte 3 · Espansione & Guerre Puniche",
+    q: "Quale città spagnola, alleata di Roma, fu attaccata da Annibale?",
+    opts: ["Barcellona", "Sagunto", "Madrid", "Cadice"],
+    correct: 1,
+    reason: "L'assedio e la conquista di Sagunto (219-218 a.C.) da parte di Annibale fu il casus belli della Seconda Guerra Punica, poiché Sagunto era sotto la protezione di Roma."
+  },
+  {
+    section: "Parte 3 · Espansione & Guerre Puniche",
+    q: "Quale impresa militare compì Annibale nel 218 a.C.?",
+    opts: ["Attraversò il mare con 1000 navi", "Valicò le Alpi con l'esercito e gli elefanti", "Sbarcò in Sicilia", "Conquistò l'Egitto"],
+    correct: 1,
+    reason: "Nel 218 a.C. Annibale compì una delle più grandi imprese militari dell'antichità: attraversò i Pirenei, la Gallia e poi le Alpi con un esercito di circa 40.000 uomini e numerosi elefanti da guerra."
+  },
+  {
+    section: "Parte 3 · Espansione & Guerre Puniche",
+    q: "In quale battaglia del 216 a.C. Roma subì una delle peggiori sconfitte?",
+    opts: ["Zama", "Canne", "Farsalo", "Azio"],
+    correct: 1,
+    reason: "La battaglia di Canne (2 agosto 216 a.C.) fu una catastrofe per Roma: Annibale accerchiò e distrusse un esercito di circa 70.000 Romani. Rimase un modello di strategia militare."
+  },
+  {
+    section: "Parte 3 · Espansione & Guerre Puniche",
+    q: "Chi sconfisse definitivamente Annibale a Zama nel 202 a.C.?",
+    opts: ["Caio Mario", "Publio Cornelio Scipione l'Africano", "Silla", "Giulio Cesare"],
+    correct: 1,
+    reason: "Scipione, detto poi l'Africano, sconfisse Annibale a Zama nel 202 a.C., ponendo fine alla Seconda Guerra Punica. Adottò la tattica annibalica dell'accerchiamento."
+  },
+  {
+    section: "Parte 3 · Espansione & Guerre Puniche",
+    q: "In che anno fu rasa al suolo Cartagine (fine III Guerra Punica)?",
+    opts: ["202 a.C.", "146 a.C.", "133 a.C.", "44 a.C."],
+    correct: 1,
+    reason: "Nel 146 a.C. Scipione Emiliano distrusse completamente Cartagine dopo tre anni di assedio. La città fu bruciata, i sopravvissuti venduti come schiavi."
+  },
+  {
+    section: "Parte 3 · Espansione & Guerre Puniche",
+    q: "Quale altra città fu distrutta dai Romani nello stesso anno di Cartagine?",
+    opts: ["Atene", "Corinto", "Sparta", "Alessandria"],
+    correct: 1,
+    reason: "Nel 146 a.C. Roma distrusse anche Corinto, città della Grecia che aveva guidato la rivolta della Lega Achea contro il dominio romano. Fu un atto di potenza simbolica."
+  },
+  {
+    section: "Parte 3 · Espansione & Guerre Puniche",
+    q: "Come ottenne Roma la provincia d'Asia nel 133 a.C.?",
+    opts: ["Con una guerra di 20 anni", "Per eredità dal re di Pergamo", "Fu comprata dai mercanti", "Fu vinta a dadi"],
+    correct: 1,
+    reason: "Attalo III, re di Pergamo (Asia Minore), morì nel 133 a.C. lasciando il suo regno in eredità a Roma. La provincia d'Asia divenne così possesso romano senza guerre."
+  },
+  {
+    section: "Parte 3 · Espansione & Guerre Puniche",
+    q: "Cos'è tecnicamente una \"provincia\" romana?",
+    opts: ["Un quartiere di Roma", "Un territorio fuori dall'Italia governato da un magistrato romano", "Un'alleanza difensiva", "Una festa religiosa"],
+    correct: 1,
+    reason: "\"Provincia\" indicava il territorio di competenza (ambito di azione) di un magistrato romano. In senso geografico, un territorio conquistato fuori dall'Italia, governato da un propretore o proconsole."
+  },
+  // PARTE 4: La Crisi della Repubblica
+  {
+    section: "Parte 4 · Crisi della Repubblica",
+    q: "Quale fenomeno economico seguì alle grandi conquiste?",
+    opts: ["La fine della schiavitù", "La crescita dei latifondi e la crisi dei piccoli proprietari", "L'abbassamento dei prezzi del sale", "La rinascita della monarchia"],
+    correct: 1,
+    reason: "Le conquiste portarono enormi ricchezze e schiavi che i ricchi patrizi usarono per creare grandi latifondi, acquistando la terra dei piccoli proprietari rovinati dalla lunga assenza militare."
+  },
+  {
+    section: "Parte 4 · Crisi della Repubblica",
+    q: "Chi erano i \"Cavalieri\" (ordine equestre)?",
+    opts: ["Soldati a cavallo poveri", "Una nuova classe ricca nata da commerci e appalti pubblici", "I sacerdoti di Giove", "I discendenti di Romolo"],
+    correct: 1,
+    reason: "I cavalieri (equites) erano una classe economicamente potente formatasi con le conquiste, arricchitasi attraverso il commercio, la gestione delle province e gli appalti pubblici (publicani)."
+  },
+  {
+    section: "Parte 4 · Crisi della Repubblica",
+    q: "Chi erano gli \"Ottimati\"?",
+    opts: ["I riformisti", "I conservatori che difendevano i privilegi del Senato", "I sostenitori di Mario", "Gli schiavi liberati"],
+    correct: 1,
+    reason: "Gli Ottimati (\"i migliori\") erano la fazione aristocratica conservatrice che difendeva la supremazia del Senato e l'ordine costituzionale repubblicano contro ogni riforma."
+  },
+  {
+    section: "Parte 4 · Crisi della Repubblica",
+    q: "Chi erano i \"Popolari\"?",
+    opts: ["I nemici di Cesare", "Aristocratici riformisti appoggiati dai cavalieri e dalla plebe", "Solo i cittadini poverissimi", "I re stranieri"],
+    correct: 1,
+    reason: "I Popolari erano politici (spesso di nobile origine) che cercavano il consenso popolare per attuare riforme agrarie e sociali, bypassando il Senato attraverso le assemblee popolari."
+  },
+  {
+    section: "Parte 4 · Crisi della Repubblica",
+    q: "Quale riforma propose Tiberio Gracco nel 133 a.C.?",
+    opts: ["L'abolizione del Senato", "La ridistribuzione dell'ager publicus ai cittadini poveri", "La guerra contro la Germania", "La costruzione di nuove terme"],
+    correct: 1,
+    reason: "Tiberio Gracco, tribuno del 133 a.C., propose di applicare il vecchio limite di 500 iugeri sull'ager publicus e di distribuire la terra eccedente ai cittadini poveri. Fu assassinato dagli Ottimati."
+  },
+  {
+    section: "Parte 4 · Crisi della Repubblica",
+    q: "Cosa prevedeva la \"Lex Frumentaria\" di Gaio Gracco?",
+    opts: ["Il divieto di coltivare orzo", "Distribuzioni di grano a prezzo agevolato per il popolo", "Una tassa sul pane", "L'obbligo di mangiare nelle mense pubbliche"],
+    correct: 1,
+    reason: "La Lex Frumentaria del 123 a.C. obbligava lo Stato a vendere il grano ai cittadini romani a un prezzo fisso e molto basso, garantendo sostentamento alle classi povere."
+  },
+  {
+    section: "Parte 4 · Crisi della Repubblica",
+    q: "Perché la riforma dell'esercito di Caio Mario (107 a.C.) fu decisiva?",
+    opts: ["Introdusse l'uso dell'arco", "Arruolò i nullatenenti creando soldati di professione fedeli al generale", "Abolì la legione", "Vietò ai poveri di combattere"],
+    correct: 1,
+    reason: "Mario aprì l'arruolamento ai capite censi (nullatenenti) che erano esclusi. Questi soldati dipendevano economicamente dal generale per il soldo e la terra al congedo, creando eserciti privati."
+  },
+  {
+    section: "Parte 4 · Crisi della Repubblica",
+    q: "Contro chi combatté Roma la \"Guerra Sociale\" (91-88 a.C.)?",
+    opts: ["Contro gli schiavi", "Contro gli alleati italici che chiedevano la cittadinanza", "Contro i pirati cilici", "Contro i Galli Senoni"],
+    correct: 1,
+    reason: "Gli alleati italici (socii), stanchi di combattere per Roma senza averne la cittadinanza, si ribellarono. La guerra si concluse con la concessione della cittadinanza romana a quasi tutti gli Italici."
+  },
+  {
+    section: "Parte 4 · Crisi della Repubblica",
+    q: "Chi fu il protagonista del primo colpo di stato militare a Roma nell'87 a.C.?",
+    opts: ["Mario", "Silla", "Pompeo", "Catilina"],
+    correct: 1,
+    reason: "Silla nel 88 a.C. (poi di nuovo nell'83-82) marciò su Roma con le sue legioni — atto sacrilego e rivoluzionario — per riprendere il comando della guerra contro Mitridate. Fu il primo colpo di stato militare romano."
+  },
+  {
+    section: "Parte 4 · Crisi della Repubblica",
+    q: "Cosa sono le \"liste di proscrizione\" sillane?",
+    opts: ["Elenchi di soldati premiati", "Elenchi di nemici politici da eliminare fisicamente", "Cataloghi di libri greci", "Liste di tasse sulle navi"],
+    correct: 1,
+    reason: "Le proscrizioni sillane (82-81 a.C.) erano elenchi pubblici di nemici politici: chi era iscritto poteva essere ucciso impunemente da chiunque, e i beni erano confiscati."
+  },
+  {
+    section: "Parte 4 · Crisi della Repubblica",
+    q: "Qual era l'obiettivo delle riforme di Silla?",
+    opts: ["Dare potere ai tribuni", "Rafforzare il potere del Senato", "Abolire la schiavitù", "Nominare un nuovo re"],
+    correct: 1,
+    reason: "Silla era un Ottimate convinto: le sue riforme (81 a.C.) miravano a rafforzare il Senato, limitare i tribuni della plebe e ripristinare l'ordine costituzionale aristocratico."
+  },
+  {
+    section: "Parte 4 · Crisi della Repubblica",
+    q: "Cosa fece Silla nel 79 a.C. che sorprese tutti?",
+    opts: ["Si fece incoronare re", "Si ritirò a vita privata", "Bruciò il Senato", "Fuggì a Cartagine"],
+    correct: 1,
+    reason: "A sorpresa, nel 79 a.C. Silla rinunciò alla dittatura e si ritirò nella sua villa di Pozzuoli. Fu l'unico dittatore romano a cedere volontariamente il potere assoluto."
+  },
+  // PARTE 5: La Fine della Repubblica e Cesare
+  {
+    section: "Parte 5 · Cesare & Fine Repubblica",
+    q: "Chi erano i tre membri del \"Primo Triumvirato\" (60 a.C.)?",
+    opts: ["Ottaviano, Antonio, Lepido", "Cesare, Pompeo, Crasso", "Bruto, Cassio, Cicerone", "Mario, Silla, Cinna"],
+    correct: 1,
+    reason: "Il Primo Triumvirato fu l'alleanza segreta tra Cesare (carisma popolare), Pompeo (gloria militare) e Crasso (ricchezza enorme), siglata nel 60 a.C. per controllare la politica romana."
+  },
+  {
+    section: "Parte 5 · Cesare & Fine Repubblica",
+    q: "Cos'era formalmente il Primo Triumvirato?",
+    opts: ["Una legge dello Stato", "Un accordo privato e segreto tra tre uomini potenti", "Un tribunale speciale", "Una festa religiosa"],
+    correct: 1,
+    reason: "Il Primo Triumvirato non aveva nessuna base legale: era semplicemente un patto privato e segreto tra tre uomini che si accordarono per sostenere reciprocamente i propri obiettivi politici."
+  },
+  {
+    section: "Parte 5 · Cesare & Fine Repubblica",
+    q: "Quale territorio scelse Cesare per il suo proconsolato dal 58 a.C.?",
+    opts: ["Egitto", "Gallia", "Spagna", "Africa"],
+    correct: 1,
+    reason: "Cesare ottenne il governo delle Gallie (Cisalpina, Narbonese e Illirico) per cinque anni, che divennero poi dieci. Le campagne galliche gli portarono gloria, ricchezze e un esercito fedele."
+  },
+  {
+    section: "Parte 5 · Cesare & Fine Repubblica",
+    q: "Chi era Vercingetorige?",
+    opts: ["Un generale romano traditore", "Il capo dei Galli che si oppose a Cesare ad Alesia", "Il re dei Parti", "Un alleato di Pompeo"],
+    correct: 1,
+    reason: "Vercingetorige era il capo arverno che nel 52 a.C. unificò le tribù galliche in una grande rivolta contro Roma. Fu sconfitto ad Alesia, fatto prigioniero e giustiziato sei anni dopo."
+  },
+  {
+    section: "Parte 5 · Cesare & Fine Repubblica",
+    q: "In quale battaglia decisiva del 52 a.C. Cesare sconfisse i Galli?",
+    opts: ["Farsalo", "Alesia", "Zama", "Canne"],
+    correct: 1,
+    reason: "L'assedio di Alesia (52 a.C.) fu il capolavoro tattico di Cesare: costruì due linee di fortini (una verso la città assediata, una verso l'esercito di soccorso) e sconfisse entrambi."
+  },
+  {
+    section: "Parte 5 · Cesare & Fine Repubblica",
+    q: "Perché Cesare varcò il Rubicone nel 49 a.C.?",
+    opts: ["Per andare in vacanza", "Per marciare su Roma contro Pompeo e il Senato (II guerra civile)", "Per fuggire dai Galli", "Per ordine di Crasso"],
+    correct: 1,
+    reason: "Il Rubicone era il confine tra la provincia di Cesare e l'Italia: varcarlo armato era un atto di guerra civile. Cesare lo attraversò nel gennaio 49 a.C., dando inizio alla guerra contro Pompeo."
+  },
+  {
+    section: "Parte 5 · Cesare & Fine Repubblica",
+    q: "Dove fu sconfitto Pompeo da Cesare nel 48 a.C.?",
+    opts: ["A Roma", "A Farsalo (Grecia)", "In Spagna", "Ad Alessandria d'Egitto"],
+    correct: 1,
+    reason: "La battaglia di Farsalo (9 agosto 48 a.C.) in Tessaglia (Grecia) fu la battaglia decisiva della guerra civile: Cesare sconfisse l'esercito senatorio di Pompeo nonostante l'inferiorità numerica."
+  },
+  {
+    section: "Parte 5 · Cesare & Fine Repubblica",
+    q: "Come morì Pompeo?",
+    opts: ["In battaglia contro Cesare", "Tradito e ucciso in Egitto dal re Tolomeo XIII", "Di vecchiaia a Roma", "Suicidandosi a Farsalo"],
+    correct: 1,
+    reason: "Pompeo fuggì dopo Farsalo verso l'Egitto, ma fu assassinato il 28 settembre 48 a.C. per ordine di Tolomeo XIII, che voleva compiacere Cesare o evitare complicazioni diplomatiche."
+  },
+  {
+    section: "Parte 5 · Cesare & Fine Repubblica",
+    q: "Cosa divenne Cesare nel 45 a.C.?",
+    opts: ["Console per un giorno", "Dittatore a vita", "Re di Roma", "Pontefice Massimo onorario"],
+    correct: 1,
+    reason: "Nel 44 a.C. il Senato nominò Cesare dictator perpetuo (dittatore a vita), una carica senza precedenti che di fatto rompeva con la tradizione repubblicana della temporaneità delle magistrature."
+  },
+  {
+    section: "Parte 5 · Cesare & Fine Repubblica",
+    q: "Quale fu l'atteggiamento di Cesare verso i nemici vinti?",
+    opts: ["Li uccise tutti", "Praticò la clemenza per ottenere consenso", "Li vendette come schiavi", "Li esiliò in Britannia"],
+    correct: 1,
+    reason: "La clementia Caesaris era uno strumento politico consapevole: perdonando i nemici (come Bruto e Cassio), Cesare si costruiva un'immagine magnifica e cercava di sanare le ferite della guerra civile."
+  },
+  {
+    section: "Parte 5 · Cesare & Fine Repubblica",
+    q: "In quale data fu assassinato Giulio Cesare?",
+    opts: ["21 aprile 753 a.C.", "Idi di marzo (15 marzo) 44 a.C.", "1 gennaio 27 a.C.", "31 a.C."],
+    correct: 1,
+    reason: "Cesare fu assassinato alle Idi di Marzo (15 marzo) del 44 a.C. nella Curia di Pompeo, durante una seduta del Senato, da una congiura di circa 60 senatori guidata da Bruto e Cassio."
+  },
+  {
+    section: "Parte 5 · Cesare & Fine Repubblica",
+    q: "Chi formò il Secondo Triumvirato (43 a.C.)?",
+    opts: ["Cesare, Pompeo, Crasso", "Ottaviano, Antonio, Lepido", "Cicerone, Bruto, Cassio", "Augusto, Tiberio, Caligola"],
+    correct: 1,
+    reason: "Il Secondo Triumvirato fu siglato nel 43 a.C. tra Ottaviano (erede di Cesare), Marco Antonio (suo luogotenente) e Lepido (pontefice massimo)."
+  },
+  {
+    section: "Parte 5 · Cesare & Fine Repubblica",
+    q: "Qual era la differenza principale tra il I e il II Triumvirato?",
+    opts: ["Il primo era pubblico, il secondo segreto", "Il secondo era una magistratura ufficiale approvata per legge", "Non c'era alcuna differenza", "Il secondo durò solo un giorno"],
+    correct: 1,
+    reason: "A differenza del Primo, il Secondo Triumvirato fu riconosciuto legalmente come magistratura straordinaria (tresviri rei publicae constituendae) con poteri illimitati per cinque anni."
+  },
+  {
+    section: "Parte 5 · Cesare & Fine Repubblica",
+    q: "In quale battaglia furono sconfitti i cesaricidi Bruto e Cassio?",
+    opts: ["Azio", "Filippi (42 a.C.)", "Canne", "Farsalo"],
+    correct: 1,
+    reason: "Le due battaglie di Filippi (in Macedonia) nell'autunno del 42 a.C. videro la sconfitta e il suicidio di Bruto e Cassio, ponendo fine alla resistenza dei cesaricidi."
+  },
+  {
+    section: "Parte 5 · Cesare & Fine Repubblica",
+    q: "Con chi si alleò Marco Antonio in Oriente contro Ottaviano?",
+    opts: ["Con i Parti", "Con Cleopatra, regina d'Egitto", "Con i Druidi gallici", "Con i pirati"],
+    correct: 1,
+    reason: "Marco Antonio, governatore dell'Oriente, si legò sentimentalmente e politicamente a Cleopatra VII, regina d'Egitto. La loro alleanza sembrò a Roma una minaccia orientale all'indipendenza della Repubblica."
+  },
+  {
+    section: "Parte 5 · Cesare & Fine Repubblica",
+    q: "Quale battaglia navale del 31 a.C. segnò la vittoria finale di Ottaviano?",
+    opts: ["Battaglia di Salamina", "Battaglia di Azio", "Battaglia di Lepanto", "Battaglia di Milazzo"],
+    correct: 1,
+    reason: "La battaglia di Azio (2 settembre 31 a.C.) vide la flotta di Ottaviano e Agrippa sconfiggere quella di Antonio e Cleopatra. I due fuggirono in Egitto, dove si suicidarono l'anno seguente."
+  },
+  // PARTE 6: Augusto e la Nascita dell'Impero
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "In che anno Ottaviano ricevette il titolo di \"Augusto\"?",
+    opts: ["44 a.C.", "27 a.C.", "31 a.C.", "14 d.C."],
+    correct: 1,
+    reason: "Il 13 gennaio 27 a.C. il Senato conferì a Ottaviano il titolo onorifico di Augustus, con cui è passato alla storia. Da quella data si fa convenzionalmente iniziare l'Impero Romano."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "Cosa significa il titolo \"Augustus\"?",
+    opts: ["Comandante dell'esercito", "Persona sacra, degna di venerazione e con autorità suprema", "Il più giovane del Senato", "Amico dei plebei"],
+    correct: 1,
+    reason: "\"Augustus\" derivava dal latino augere (accrescere) e auspicium: indicava una persona sacra, degna di venerazione religiosa, con un'autorità morale e politica superiore."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "Augusto trasformò Roma in un Principato/Impero:",
+    opts: ["Con una violenta rivoluzione improvvisa", "Gradualmente, mantenendo formalmente le istituzioni repubblicane", "Abolendo il Senato", "Facendosi chiamare Re"],
+    correct: 1,
+    reason: "Augusto fu abile nel preservare le forme della Repubblica (Senato, magistrature, assemblee) svuotandole di potere reale. Preferì il titolo di princeps (primo cittadino) a quello di rex."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "Quale titolo indicava che Augusto parlava per primo in Senato?",
+    opts: ["Imperator", "Princeps Senatus", "Pontifex Maximus", "Tribuno"],
+    correct: 1,
+    reason: "Princeps Senatus (primo del Senato) era un titolo onorifico che indicava chi parlava per primo nelle sedute. Augusto usò questo titolo per sottolineare la sua autorità morale senza sembrare un monarca."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "Quale potere permetteva ad Augusto di porre il veto e avere l'inviolabilità?",
+    opts: ["Imperium infinitum", "Tribunicia potestas (potere del tribuno)", "Potere censorio", "Carica di console"],
+    correct: 1,
+    reason: "Augusto deteneva in modo permanente la tribunicia potestas, che gli conferiva l'inviolabilità personale (sacrosanctitas) e il diritto di veto (intercessio) su qualsiasi atto legislativo."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "Augusto promosse il ritorno a quali valori?",
+    opts: ["Al lusso orientale", "Al mos maiorum e alla centralità della famiglia", "Al politeismo greco puro", "Alla democrazia greca"],
+    correct: 1,
+    reason: "Il programma morale augusteo (leges Iuliae de maritandis ordinibus e de adulteriis) promuoveva i valori tradizionali romani: pietas, familia, moderazione, contro il lusso e il celibato."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "Cos'era l'\"evergetismo\" di Augusto?",
+    opts: ["Una nuova tassa", "La ridistribuzione di risorse, cibo (annona) e spettacoli al popolo", "Una tecnica militare", "Un tipo di architettura"],
+    correct: 1,
+    reason: "L'evergetismo era la pratica del potente di elargire doni alla popolazione: distribuzioni di grano (annona), giochi, costruzioni pubbliche. Augusto ne fece uno strumento fondamentale di consenso."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "Chi era Mecenate?",
+    opts: ["Un generale di Augusto", "Il protettore degli artisti che usava la cultura per scopi politici", "Il figlio di Cleopatra", "Un ribelle gallico"],
+    correct: 1,
+    reason: "Caio Mecenate era il principale collaboratore di Augusto per la politica culturale: finanziava e proteggeva poeti come Virgilio, Orazio e Properzio, guidandone la produzione verso temi favorevoli al regime."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "Quale opera letteraria fu commissionata per celebrare le origini di Roma e Augusto?",
+    opts: ["Odissea", "Eneide di Virgilio", "Le Storie di Polibio", "I Fasti di Ovidio"],
+    correct: 1,
+    reason: "L'Eneide di Virgilio (completata post mortem nel 19 a.C.) narrava le origini troiane di Roma attraverso il viaggio di Enea, legittimando la discendenza divina della gens Iulia e il principato di Augusto."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "Cosa sono le \"Insulae\"?",
+    opts: ["Isole greche conquistate", "Grandi caseggiati a più piani dove viveva la plebe", "Le navi da guerra di Augusto", "Caserme per pretoriani"],
+    correct: 1,
+    reason: "Le insulae erano i condomini popolari romani, edifici a più piani (fino a 6-8 m di altezza) affittati alla plebe urbana. Erano spesso fatiscenti e soggetti a incendi e crolli."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "Chi erano i \"Pretoriani\"?",
+    opts: ["I giudici del tribunale", "Un corpo scelto di 9.000 soldati a guardia dell'imperatore", "Gli abitanti delle province", "I sacerdoti di Marte"],
+    correct: 1,
+    reason: "La Guardia Pretoriana era un corpo militare d'élite di circa 9.000 uomini organizzato da Augusto con stipendio più alto e servizio più breve rispetto alle legioni. Erano la forza armata personale del principe."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "Come furono divise le province sotto Augusto?",
+    opts: ["In ricche e povere", "In Senatorie (pacificate) e Imperiali (di confine con eserciti)", "In latine e greche", "Non furono divise"],
+    correct: 1,
+    reason: "Augusto divise le province in senatorie (pacificate, governate da proconsoli scelti dal Senato) e imperiali (di frontiera, con eserciti, governate da legati nominati dall'imperatore)."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "Quale provincia era considerata proprietà personale dell'imperatore?",
+    opts: ["Gallia", "Egitto", "Spagna", "Sicilia"],
+    correct: 1,
+    reason: "L'Egitto era trattato come proprietà privata dell'imperatore (non come normale provincia). Nessun senatore poteva entrarvi senza permesso. Il suo grano era vitale per l'approvvigionamento di Roma."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "Cosa rappresentava il \"Limes\"?",
+    opts: ["Una moneta", "Il confine fortificato dell'Impero", "Una legge sulle tasse", "Un magistrato stradale"],
+    correct: 1,
+    reason: "Il limes (dal latino: percorso, frontiera) era il sistema di confini militari dell'Impero Romano, composto da strade, castelli, torri di guardia e barriere naturali o artificiali."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "Quale sconfitta militare nel 9 d.C. fermò l'espansione in Germania?",
+    opts: ["Azio", "Teutoburgo (disfatta di Varo)", "Filippi", "Alesia"],
+    correct: 1,
+    reason: "Nella foresta di Teutoburgo (9 d.C.) Arminio, capo dei Germani Cherusci, tese un'imboscata e distrusse tre legioni romane guidate da Publio Quintilio Varo. Augusto rinunciò alla conquista della Germania."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "Augusto istituì i \"Vigili del fuoco\" (Vigiles) per:",
+    opts: ["Combattere i nemici esterni", "Prevenire gli incendi frequenti nelle case in legno (insulae)", "Costruire templi", "Sorvegliare il Senato"],
+    correct: 1,
+    reason: "I Vigiles erano un corpo di 7.000 uomini organizzato da Augusto nel 6 d.C. per combattere gli incendi frequentissimi nelle insulae di legno e mattoni crudi della Roma antica."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "Quale monumento celebra il periodo di pace instaurato da Augusto?",
+    opts: ["Colosseo", "Ara Pacis Augustae", "Pantheon", "Colonna Traiana"],
+    correct: 1,
+    reason: "L'Ara Pacis Augustae (altare della pace di Augusto), dedicata nel 9 a.C., era un altare monumentale voluto dal Senato per celebrare il ritorno di Augusto dalla Gallia e dalla Spagna e la pace da lui portata."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "Il sistema stradale romano sotto l'impero serviva principalmente a:",
+    opts: ["Far passeggiare i cittadini", "Spostare rapidamente le legioni e favorire i commerci", "Delimitare i campi", "Fare gare di carri"],
+    correct: 1,
+    reason: "La rete stradale romana (circa 400.000 km) aveva una funzione primariamente militare (rapido spostamento di legioni) e secondariamente commerciale (circolazione di merci e persone)."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "Qual era il centro del mondo romano per economia e politica?",
+    opts: ["Alessandria", "L'Urbe (Roma)", "Atene", "Cartagine"],
+    correct: 1,
+    reason: "Roma (l'Urbs per eccellenza) era il cuore pulsante dell'Impero: centro politico, economico, demografico (con circa 1 milione di abitanti) e culturale. Tutte le strade portavano a Roma."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "Chi sostituiva l'imperatore quando era lontano da Roma?",
+    opts: ["Il Console", "Il Prefetto Urbano", "Il tribuno della plebe", "Il pontefice massimo"],
+    correct: 1,
+    reason: "Il Praefectus Urbi (prefetto della città) era il rappresentante dell'imperatore in sua assenza, con poteri di ordine pubblico, giurisdizione penale e supervisione dei servizi urbani."
+  },
+  {
+    section: "Parte 6 · Augusto & l'Impero",
+    q: "In che anno morì Augusto, lasciando l'Impero ormai consolidato?",
+    opts: ["27 a.C.", "14 d.C.", "44 a.C.", "476 d.C."],
+    correct: 1,
+    reason: "Augusto morì il 19 agosto del 14 d.C. a Nola, in Campania, all'età di 75 anni. Gli succedette il figliastro Tiberio, dando inizio alla dinastia Giulio-Claudia."
+  }
+];
+
+let current = 0;
+let score = 0;
+let wrong = 0;
+let answered = false;
+
+const sections = [
+  { start: 0,  end: 15,  label: "Parte 1 · Origini & Monarchia" },
+  { start: 16, end: 32,  label: "Parte 2 · La Repubblica" },
+  { start: 33, end: 50,  label: "Parte 3 · Espansione & Puniche" },
+  { start: 51, end: 62,  label: "Parte 4 · Crisi della Repubblica" },
+  { start: 63, end: 78,  label: "Parte 5 · Cesare & Fine Rep." },
+  { start: 79, end: 99,  label: "Parte 6 · Augusto & l'Impero" }
+];
+
+function getSectionLabel(idx) {
+  for (const s of sections) {
+    if (idx >= s.start && idx <= s.end) return s.label;
+  }
+  return "";
+}
+
+function startQuiz() {
+  document.getElementById('intro').classList.remove('active');
+  document.getElementById('quiz').classList.add('active');
+  loadQuestion();
+}
+
+function loadQuestion() {
+  answered = false;
+  const q = QUESTIONS[current];
+  const labels = ['A', 'B', 'C', 'D'];
+
+  document.getElementById('sectionBadge').textContent = getSectionLabel(current);
+  document.getElementById('qNum').textContent = current + 1;
+  document.getElementById('questionNum').textContent = `DOMANDA ${String(current + 1).padStart(2, '0')}`;
+  document.getElementById('questionText').textContent = q.q;
+  document.getElementById('progressBar').style.width = ((current + 1) / QUESTIONS.length * 100) + '%';
+  document.getElementById('tallyC').textContent = score;
+  document.getElementById('tallyW').textContent = wrong;
+
+  const grid = document.getElementById('optionsGrid');
+  grid.innerHTML = '';
+  q.opts.forEach((opt, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'option-btn';
+    btn.innerHTML = `<span class="option-label">${labels[i]}</span><span>${opt}</span>`;
+    btn.onclick = () => selectAnswer(i);
+    grid.appendChild(btn);
+  });
+
+  const fb = document.getElementById('feedback');
+  fb.className = 'feedback';
+  fb.style.display = 'none';
+
+  document.getElementById('btnNext').classList.remove('show');
+}
+
+function selectAnswer(chosen) {
+  if (answered) return;
+  answered = true;
+
+  const q = QUESTIONS[current];
+  const btns = document.querySelectorAll('.option-btn');
+
+  btns.forEach(b => { b.disabled = true; b.classList.add('disabled'); });
+
+  const isCorrect = chosen === q.correct;
+
+  btns[chosen].classList.add(isCorrect ? 'correct' : 'wrong');
+  if (!isCorrect) btns[q.correct].classList.add('correct');
+
+  const fb = document.getElementById('feedback');
+  fb.style.display = 'flex';
+
+  if (isCorrect) {
+    score++;
+    fb.className = 'feedback correct-fb show';
+    document.getElementById('fbIcon').textContent = '✓';
+    document.getElementById('fbTitle').textContent = 'Corretto!';
+    document.getElementById('fbText').textContent = 'Ottima risposta! Continua così.';
+  } else {
+    wrong++;
+    fb.className = 'feedback wrong-fb show';
+    document.getElementById('fbIcon').textContent = '✗';
+    document.getElementById('fbTitle').textContent = 'Risposta errata';
+    document.getElementById('fbText').textContent = `La risposta corretta era: "${q.opts[q.correct]}". ${q.reason}`;
+  }
+
+  document.getElementById('tallyC').textContent = score;
+  document.getElementById('tallyW').textContent = wrong;
+
+  const btnNext = document.getElementById('btnNext');
+  btnNext.textContent = current < QUESTIONS.length - 1 ? 'Prossima Domanda →' : 'Vedi il Risultato →';
+  btnNext.classList.add('show');
+}
+
+function nextQuestion() {
+  current++;
+  if (current >= QUESTIONS.length) {
+    showResults();
+  } else {
+    loadQuestion();
+  }
+}
+
+function showResults() {
+  document.getElementById('quiz').classList.remove('active');
+  document.getElementById('results').classList.add('active');
+
+  const pct = Math.round(score / QUESTIONS.length * 100);
+  let grade, label;
+
+  if (pct >= 95)      { grade = 10; label = "ECCELLENTE · Optimus Miles"; }
+  else if (pct >= 90) { grade = 9;  label = "OTTIMO · Senator Clarissimus"; }
+  else if (pct >= 80) { grade = 8;  label = "BUONO · Civis Romanus"; }
+  else if (pct >= 70) { grade = 7;  label = "DISCRETO · Plebeius Doctus"; }
+  else if (pct >= 60) { grade = 6;  label = "SUFFICIENTE · Tiro Scholae"; }
+  else if (pct >= 50) { grade = 5;  label = "INSUFFICIENTE · Discipulus"; }
+  else if (pct >= 35) { grade = 4;  label = "SCARSO · Barbarus"; }
+  else                { grade = 3;  label = "GRAVEMENTE INS. · Ignorantus"; }
+
+  document.getElementById('resultGrade').textContent = grade;
+  document.getElementById('resultLabel').textContent = label;
+  document.getElementById('finalScore').textContent = score;
+  document.getElementById('statCorrect').textContent = score;
+  document.getElementById('statWrong').textContent = wrong;
+  document.getElementById('statPct').textContent = pct + '%';
+
+  // Reset salvataggio
+  document.getElementById('playerName').value = '';
+  document.getElementById('saveStatus').textContent = '';
+  document.getElementById('saveStatus').className = 'save-status';
+  document.getElementById('btnSave').disabled = false;
+
+  loadLeaderboard();
+}
+
+function restartQuiz() {
+  current = 0; score = 0; wrong = 0; answered = false;
+  document.getElementById('results').classList.remove('active');
+  document.getElementById('intro').classList.add('active');
+}
+
+// ── FIREBASE FUNCTIONS ──
+
+async function saveScore() {
+  const nameEl = document.getElementById('playerName');
+  const statusEl = document.getElementById('saveStatus');
+  const btnSave = document.getElementById('btnSave');
+
+  const name = nameEl.value.trim();
+  if (!name) {
+    statusEl.textContent = '⚠ Inserisci il tuo nome prima di salvare.';
+    statusEl.className = 'save-status err';
+    return;
+  }
+
+  btnSave.disabled = true;
+  statusEl.textContent = 'Salvataggio in corso…';
+  statusEl.className = 'save-status';
+
+  const pct = Math.round(score / QUESTIONS.length * 100);
+  let grade;
+  if (pct >= 95) grade = 10;
+  else if (pct >= 90) grade = 9;
+  else if (pct >= 80) grade = 8;
+  else if (pct >= 70) grade = 7;
+  else if (pct >= 60) grade = 6;
+  else if (pct >= 50) grade = 5;
+  else if (pct >= 35) grade = 4;
+  else grade = 3;
+
+  try {
+    await db.collection('quiz_storia_romana').add({
+      nome: name,
+      corrette: score,
+      errate: wrong,
+      percentuale: pct,
+      voto: grade,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    statusEl.textContent = '✓ Punteggio salvato! Vedi la classifica sotto.';
+    statusEl.className = 'save-status ok';
+    loadLeaderboard();
+  } catch (e) {
+    statusEl.textContent = '✗ Errore nel salvataggio. Controlla la connessione.';
+    statusEl.className = 'save-status err';
+    btnSave.disabled = false;
+  }
+}
+
+async function loadLeaderboard() {
+  const lbList = document.getElementById('lbList');
+  lbList.innerHTML = '<li class="lb-loading">Caricamento…</li>';
+
+  try {
+    const snap = await db.collection('quiz_storia_romana')
+      .orderBy('corrette', 'desc')
+      .orderBy('createdAt', 'desc')
+      .limit(10)
+      .get();
+
+    if (snap.empty) {
+      lbList.innerHTML = '<li class="lb-loading">Nessun punteggio ancora. Sii il primo!</li>';
+      return;
+    }
+
+    const medals = ['🥇','🥈','🥉'];
+    lbList.innerHTML = '';
+    let rank = 1;
+    snap.forEach(doc => {
+      const d = doc.data();
+      const li = document.createElement('li');
+      li.className = 'lb-item';
+      li.innerHTML = `
+        <span class="lb-rank">${medals[rank-1] || rank}</span>
+        <span class="lb-name">${escHtml(d.nome)}</span>
+        <span class="lb-score">${d.corrette}/100</span>
+        <span class="lb-grade">${d.voto}/10</span>
+      `;
+      lbList.appendChild(li);
+      rank++;
+    });
+  } catch (e) {
+    lbList.innerHTML = '<li class="lb-loading">Impossibile caricare la classifica.</li>';
+  }
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyAdro0lRN-n5D4dhBeTz8g8PWF48YAZLrw",
+  authDomain: "qrcode-generator-f5335.firebaseapp.com",
+  projectId: "qrcode-generator-f5335",
+  storageBucket: "qrcode-generator-f5335.firebasestorage.app",
+  messagingSenderId: "465412841272",
+  appId: "1:465412841272:web:c282cc195b415b3f16ebcd"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+</script>
+</body>
+</html>
